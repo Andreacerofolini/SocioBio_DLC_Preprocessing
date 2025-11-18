@@ -29,3 +29,6 @@ progress_sociobio*.json
 01_video_cropper/output*/
 02_video_downsampler/output*/
 03_video_enhancer/output*/
+
+# Ignora i file di configurazione che contengono i path assoluti specifici della macchina
+config_local.py

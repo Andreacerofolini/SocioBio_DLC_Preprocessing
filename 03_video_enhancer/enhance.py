@@ -1,6 +1,7 @@
 import cv2
 import os
 import numpy as np
+from tqdm import tqdm # Aggiunto
 
 # --- CONFIGURATION ---
 INPUT_FOLDER = r"../02_video_downsampler/output_downsampled"
@@ -31,6 +32,7 @@ def main():
         
         w, h = int(cap.get(3)), int(cap.get(4))
         fps = cap.get(5)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) # Ottieni il totale dei frame
         
         out_name = f"enhanced_{video}"
         out_path = os.path.join(OUTPUT_FOLDER, out_name)
@@ -40,12 +42,15 @@ def main():
         
         print(f"Processing: {video}")
         
-        while True:
-            ret, frame = cap.read()
-            if not ret: break
-            
-            enhanced_frame = apply_clahe(frame)
-            out.write(enhanced_frame)
+        # Inizializza la barra di progressione
+        with tqdm(total=total_frames, desc=video, unit='frame', leave=True) as pbar:
+            while True:
+                ret, frame = cap.read()
+                if not ret: break
+                
+                enhanced_frame = apply_clahe(frame)
+                out.write(enhanced_frame)
+                pbar.update(1) # Aggiorna la barra
             
         cap.release()
         out.release()

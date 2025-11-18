@@ -5,12 +5,16 @@ import pandas as pd
 import json
 from string import ascii_uppercase
 import sys
+from tqdm import tqdm 
+import sys # Necessario per importare il config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config_local import INPUT_CROPPER_PATH, OUTPUT_CROPPER_PATH, EXCEL_META_PATH # <--- Importa i path locali
 
 # --- CONFIGURATION ---
-# Edit these paths
-VIDEO_PATH = r"C:\Path\To\RawVideos"
-OUTPUT_PATH = r"C:\Path\To\CroppedVideos"
-EXCEL_PATH = r"C:\Path\To\Data\metadata.xlsx"
+# Edit these paths - ORA LEGGE DAL FILE LOCALE
+VIDEO_PATH = INPUT_CROPPER_PATH
+OUTPUT_PATH = OUTPUT_CROPPER_PATH
+EXCEL_PATH = EXCEL_META_PATH
 PROGRESS_FILE = "progress_static.json"
 
 # --- EXPERIMENT SETTINGS (CHANGE THIS!) ---
@@ -61,6 +65,7 @@ def load_metadata():
         # Check for "file name" column
         if "file name" in df.columns: col_file = "file name"
         elif "filename" in df.columns: col_file = "filename"
+        elif "file_name" in df.columns: col_file = "file_name"
         else:
             print(f"ERROR: Metadata must contain a 'file name' column.")
             sys.exit()
@@ -95,7 +100,7 @@ def main():
         row = df_info[df_info[col_filename] == video_name_clean]
         
         if row.empty:
-            row = df_info[df_info[col_filename].str.contains(video_name_clean, regex=False)]
+            row = df_info[df[col_filename].str.contains(video_name_clean, regex=False)]
 
         if row.empty:
             print(f"\n[SKIP] '{video_file}' not found in Excel.")
@@ -194,6 +199,7 @@ def main():
 
 def process_video(filename, filepath, cuts_dict, subjects_list):
     cap = cv2.VideoCapture(filepath)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) # Ottieni il totale dei frame
     writers = []
     clean_name = os.path.splitext(filename)[0]
     
@@ -206,13 +212,16 @@ def process_video(filename, filepath, cuts_dict, subjects_list):
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         writers.append({'writer': cv2.VideoWriter(out_full, fourcc, VIDEO_FPS, (w, h)), 'coords': coords})
 
-    while True:
-        ret, frame = cap.read()
-        if not ret: break
-        for item in writers:
-            c = item['coords']
-            crop = frame[c[1]:c[3], c[0]:c[2]]
-            item['writer'].write(crop)
+    # Inizializza la barra di progressione
+    with tqdm(total=total_frames, desc=f"Writing {filename}", unit='frame', leave=True) as pbar:
+        while True:
+            ret, frame = cap.read()
+            if not ret: break
+            for item in writers:
+                c = item['coords']
+                crop = frame[c[1]:c[3], c[0]:c[2]]
+                item['writer'].write(crop)
+            pbar.update(1) # Aggiorna la barra
 
     cap.release()
     for item in writers: item['writer'].release()

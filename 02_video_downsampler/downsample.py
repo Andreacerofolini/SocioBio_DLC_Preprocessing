@@ -1,5 +1,6 @@
 import cv2
 import os
+from tqdm import tqdm # Aggiunto
 
 # --- CONFIGURATION ---
 INPUT_FOLDER = r"../01_video_cropper/output_videos"
@@ -20,6 +21,7 @@ def main():
         
         w, h = int(cap.get(3)), int(cap.get(4))
         fps = cap.get(5)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) # Ottieni il totale dei frame
         
         new_w, new_h = int(w * RESIZE_FACTOR), int(h * RESIZE_FACTOR)
         new_fps = fps / FRAME_SKIP
@@ -33,14 +35,17 @@ def main():
         print(f"Processing: {video} -> {new_w}x{new_h} @ {new_fps:.1f}fps")
         
         count = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret: break
-            
-            if count % FRAME_SKIP == 0:
-                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                out.write(resized)
-            count += 1
+        # Inizializza la barra di progressione
+        with tqdm(total=total_frames, desc=video, unit='frame', leave=True) as pbar:
+            while True:
+                ret, frame = cap.read()
+                if not ret: break
+                
+                if count % FRAME_SKIP == 0:
+                    resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                    out.write(resized)
+                count += 1
+                pbar.update(1) # Aggiorna la barra
             
         cap.release()
         out.release()

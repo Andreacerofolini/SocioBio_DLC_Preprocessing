@@ -5,12 +5,17 @@ import pandas as pd
 import json
 from string import ascii_uppercase
 import sys
+from tqdm import tqdm 
+import sys # Necessario per importare il config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config_local import INPUT_CROPPER_PATH, OUTPUT_CROPPER_PATH, EXCEL_META_PATH # <--- Importa i path locali
 
 # --- CONFIGURATION ---
-VIDEO_PATH = r"C:\Path\To\RawVideos"
-OUTPUT_PATH = r"C:\Path\To\CroppedVideos"
-EXCEL_PATH = r"C:\Path\To\Data\metadata.xlsx"
-PROGRESS_FILE = "progress_drift.json"
+# Edit these paths - ORA LEGGE DAL FILE LOCALE
+VIDEO_PATH = INPUT_CROPPER_PATH
+OUTPUT_PATH = OUTPUT_CROPPER_PATH
+EXCEL_PATH = EXCEL_META_PATH
+PROGRESS_FILE = "progress_static.json"
 
 # --- EXPERIMENT SETTINGS (CHANGE THIS!) ---
 NUM_BOXES = 15           # How many subjects/dishes?
@@ -56,6 +61,7 @@ def load_metadata():
         df.columns = [str(c).strip() for c in df.columns]
         if "file name" in df.columns: col_file = "file name"
         elif "filename" in df.columns: col_file = "filename"
+        elif "file_name" in df.columns: col_file = "file_name"
         else:
             print(f"ERROR: Metadata must contain a 'file name' column.")
             sys.exit()
@@ -269,36 +275,39 @@ def process_video(filename, filepath, cuts_dict, subjects_list, total_drift):
         })
 
     frame_idx = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret: break
-        
-        if total_drift != (0,0) and total_frames > 0:
-            shift_x = int(total_drift[0] * (frame_idx / total_frames))
-            shift_y = int(total_drift[1] * (frame_idx / total_frames))
-        else:
-            shift_x, shift_y = 0, 0
-
-        img_h, img_w = frame.shape[:2]
-
-        for item in writers:
-            base = item['base_coords']
-            curr_x1 = base[0] + shift_x
-            curr_y1 = base[1] + shift_y
-            curr_x2 = curr_x1 + item['w']
-            curr_y2 = curr_y1 + item['h']
-
-            curr_x1 = max(0, min(curr_x1, img_w - 1))
-            curr_y1 = max(0, min(curr_y1, img_h - 1))
-            curr_x2 = max(curr_x1 + 1, min(curr_x2, img_w))
-            curr_y2 = max(curr_y1 + 1, min(curr_y2, img_h))
+    # Inizializza la barra di progressione
+    with tqdm(total=total_frames, desc=f"Writing {filename}", unit='frame', leave=True) as pbar:
+        while True:
+            ret, frame = cap.read()
+            if not ret: break
             
-            crop = frame[curr_y1:curr_y2, curr_x1:curr_x2]
-            if crop.shape[0] != item['h'] or crop.shape[1] != item['w']:
-                 crop = cv2.resize(crop, (item['w'], item['h']))
+            if total_drift != (0,0) and total_frames > 0:
+                shift_x = int(total_drift[0] * (frame_idx / total_frames))
+                shift_y = int(total_drift[1] * (frame_idx / total_frames))
+            else:
+                shift_x, shift_y = 0, 0
 
-            item['writer'].write(crop)
-        frame_idx += 1
+            img_h, img_w = frame.shape[:2]
+
+            for item in writers:
+                base = item['base_coords']
+                curr_x1 = base[0] + shift_x
+                curr_y1 = base[1] + shift_y
+                curr_x2 = curr_x1 + item['w']
+                curr_y2 = curr_y1 + item['h']
+
+                curr_x1 = max(0, min(curr_x1, img_w - 1))
+                curr_y1 = max(0, min(curr_y1, img_h - 1))
+                curr_x2 = max(curr_x1 + 1, min(curr_x2, img_w))
+                curr_y2 = max(curr_y1 + 1, min(curr_y2, img_h))
+                
+                crop = frame[curr_y1:curr_y2, curr_x1:curr_x2]
+                if crop.shape[0] != item['h'] or crop.shape[1] != item['w']:
+                    crop = cv2.resize(crop, (item['w'], item['h']))
+
+                item['writer'].write(crop)
+            frame_idx += 1
+            pbar.update(1) # Aggiorna la barra
 
     cap.release()
     for item in writers: item['writer'].release()

@@ -1,9 +1,14 @@
 import cv2
 import os
+from tqdm import tqdm 
+import sys # Necessario per importare il config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config_local import INPUT_ROTATOR_PATH # <--- Importa il path locale
 
 # --- CONFIGURATION ---
-INPUT_FOLDER = r"C:\Path\To\RawUpsideDownVideos"
-OUTPUT_FOLDER = r"output_rotated"
+# Usa la variabile importata dal file locale
+INPUT_FOLDER = INPUT_ROTATOR_PATH 
+OUTPUT_FOLDER = r"output_rotated" # Path relativo - Lascia così per la repo!
 # ---------------------
 
 def main():
@@ -36,22 +41,20 @@ def main():
 
         print(f"Rotating: {video_file} (180 degrees)...")
         
-        frame_count = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            
-            # ROTATION 180 DEGREES
-            rotated_frame = cv2.rotate(frame, cv2.ROTATE_180)
-            
-            out.write(rotated_frame)
-            frame_count += 1
-            
-            if frame_count % 100 == 0:
-                print(f"  -> Processed {frame_count}/{total_frames} frames", end='\r')
-
-        print(f"\nDone: {video_file}")
+        # Inizializza la barra di progressione con il conteggio totale dei frame
+        with tqdm(total=total_frames, desc=video_file, unit='frame', leave=True) as pbar:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # ROTATION 180 DEGREES
+                rotated_frame = cv2.rotate(frame, cv2.ROTATE_180)
+                
+                out.write(rotated_frame)
+                pbar.update(1) # Aggiorna la barra per ogni frame
+        
+        print(f"Done: {video_file}")
         cap.release()
         out.release()
 
