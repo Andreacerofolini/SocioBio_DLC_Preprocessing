@@ -1,27 +1,31 @@
-# SocioBio DLC Preprocessing Tools
+# SocioBio DLC Preprocessing Suite
 
-A collection of Python scripts designed to preprocess video data from sociobiology experiments (e.g., multiple Petri dishes) for analysis with **DeepLabCut**.
+A collection of Python tools designed to streamline the video preprocessing workflow for sociobiology experiments (e.g., 15 Petri dishes recorded simultaneously) before analysis with **DeepLabCut**.
 
-## 📂 Repository Structure
-
-* **01_video_cropper**: Tools to crop a single video containing multiple subjects (e.g., 15 Petri dishes) into individual video files per subject. Includes metadata integration via Excel.
-* **02_video_downsampler**: Batch processing tool to reduce resolution and framerate (FPS) to speed up DeepLabCut training and analysis.
-* **03_video_enhancer**: Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) to improve subject visibility in low-contrast environments.
-
-## 🚀 Recommended Workflow
-
-1.  **Crop**: Isolate individual subjects from the raw footage.
-2.  **Downsample**: Reduce video size to manageable dimensions (e.g., 640px, 30fps).
-3.  *(Optional)* **Enhance**: If contrast is poor, apply the CLAHE filter.
-4.  **DeepLabCut**: Import the final processed videos for frame extraction and training.
-
-> **DeepLabCut Note**: Always train your model on videos with the same resolution and FPS as the ones you intend to analyze. Do not train on high-res videos and analyze low-res ones.
+This suite handles:
+1.  **Rotation**: Fixing camera orientation.
+2.  **Cropping**: Splitting multi-subject videos into single-subject clips (with drift correction).
+3.  **Downsampling**: Reducing resolution and FPS for faster AI training.
+4.  **Enhancement**: Improving contrast for better tracking.
 
 ---
 
-## 🛠️ Installation
+## 🚀 Workflow Overview
 
-Ensure you have Python installed. Install the required dependencies:
+Follow this order to prepare your videos:
 
+| Step | Tool Folder | When to use it? |
+| :--- | :--- | :--- |
+| **0** | `00_video_rotator` | **Only if** the camera was mounted upside-down. |
+| **1** | `01_video_cropper` | **Always**. To cut the 15 subjects into individual videos. |
+| **2** | `02_video_downsampler` | **Always**. To reduce file size (e.g., 1080p 60fps -> 540p 30fps). |
+| **3** | `03_video_enhancer` | **Optional**. Use if the subject is hard to see (low contrast). |
+
+---
+
+## 📋 Prerequisites
+
+### 1. Installation
+Install the required Python libraries:
 ```bash
 pip install -r requirements.txt
