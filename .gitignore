@@ -1,0 +1,31 @@
+# --- Python & OS Garbage ---
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# --- VIDEO FILES (CRITICAL: GitHub rejects files >100MB) ---
+# This prevents you from accidentally uploading raw footage.
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# --- Data & Metadata ---
+# Ignore raw data files for privacy and size.
+# You should only share the code, not the experimental data.
+*.xlsx
+*.xls
+*.csv
+
+# --- Session/Progress Files ---
+# These are your local save files. They should not be shared.
+progress_static.json
+progress_drift.json
+progress_sociobio*.json
+
+# --- Output Folders ---
+# Ignore any output folder created by the scripts
+01_video_cropper/output*/
+02_video_downsampler/output*/
+03_video_enhancer/output*/
