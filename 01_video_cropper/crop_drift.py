@@ -12,15 +12,20 @@ OUTPUT_PATH = r"C:\Path\To\CroppedVideos"
 EXCEL_PATH = r"C:\Path\To\Data\metadata.xlsx"
 PROGRESS_FILE = "progress_drift.json"
 
-NUM_BOXES = 15 
+# --- EXPERIMENT SETTINGS (CHANGE THIS!) ---
+NUM_BOXES = 15           # How many subjects/dishes?
+COL_PREFIX = "Pos"       # Excel prefix (Pos1, Pos2...)
 VIDEO_FPS = 60
 SCALE_FACTOR = 0.5 
+# ------------------------------------------
 
-COL_FILENAME = "file name" 
-POS_COLUMNS = [f"Pos{i}" for i in range(1, 16)] 
-# --- END CONFIGURATION ---
+POS_COLUMNS = [f"{COL_PREFIX}{i}" for i in range(1, NUM_BOXES + 1)]
 
-BOX_NAMES = list(ascii_uppercase)[:NUM_BOXES]
+if NUM_BOXES <= 26:
+    BOX_NAMES = list(ascii_uppercase)[:NUM_BOXES]
+else:
+    BOX_NAMES = [str(i) for i in range(1, NUM_BOXES + 1)]
+
 np.random.seed(42)
 BOX_COLORS = [tuple(map(int, np.random.randint(50, 255, 3))) for _ in range(NUM_BOXES)]
 current_coords = []
@@ -34,27 +39,29 @@ def get_coordinate(event, x, y, flags, param):
 
 def load_progress():
     if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, 'r') as f:
-            return json.load(f)
+        with open(PROGRESS_FILE, 'r') as f: return json.load(f)
     return {}
 
 def save_progress(data):
-    with open(PROGRESS_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    with open(PROGRESS_FILE, 'w') as f: json.dump(data, f, indent=4)
 
 def load_metadata():
     if not os.path.exists(EXCEL_PATH):
         print(f"ERROR: Excel file not found: {EXCEL_PATH}")
         sys.exit()
     try:
-        if EXCEL_PATH.endswith('.csv'):
-            df = pd.read_csv(EXCEL_PATH)
-        else:
-            df = pd.read_excel(EXCEL_PATH)
+        if EXCEL_PATH.endswith('.csv'): df = pd.read_csv(EXCEL_PATH)
+        else: df = pd.read_excel(EXCEL_PATH)
+        
         df.columns = [str(c).strip() for c in df.columns]
-        if COL_FILENAME in df.columns:
-            df[COL_FILENAME] = df[COL_FILENAME].astype(str).str.strip()
-        return df
+        if "file name" in df.columns: col_file = "file name"
+        elif "filename" in df.columns: col_file = "filename"
+        else:
+            print(f"ERROR: Metadata must contain a 'file name' column.")
+            sys.exit()
+            
+        df[col_file] = df[col_file].astype(str).str.strip()
+        return df, col_file
     except Exception as e:
         print(f"Error reading metadata: {e}")
         sys.exit()
@@ -63,30 +70,30 @@ def main():
     global current_coords
     if not os.path.exists(OUTPUT_PATH): os.makedirs(OUTPUT_PATH)
 
-    df_info = load_metadata()
+    df_info, col_filename = load_metadata()
     video_files = [f for f in os.listdir(VIDEO_PATH) if f.lower().endswith(('.mov', '.mp4', '.avi'))]
     completed_work = load_progress()
     last_cuts_memory = None 
 
     print("-" * 50)
-    print("DRIFT CORRECTION MODE - COMMANDS:")
-    print("  [Left Click]: Draw box / Define drift points")
-    print("  [ n ]       : Confirm Box")
-    print("  [ z ]       : Undo")
-    print("  [ c ]       : Copy from previous video")
-    print("  [ e ]       : GOTO END (Check for movement)")
-    print("  [ r ]       : RESET VIEW (Back to start)")
-    print("  [ d ]       : CALCULATE DRIFT (If camera moved)")
-    print("  [ s ]       : SAVE and PROCESS")
+    print(f"DRIFT CORRECTION MODE | Subjects: {NUM_BOXES}")
+    print("  [Click]: Draw box / Drift points")
+    print("  [ n ]  : Confirm Box")
+    print("  [ z ]  : Undo")
+    print("  [ c ]  : Copy Previous")
+    print("  [ e ]  : GOTO END (Check movement)")
+    print("  [ r ]  : RESET VIEW")
+    print("  [ d ]  : DRIFT TOOL")
+    print("  [ s ]  : SAVE")
     print("-" * 50)
 
     for video_file in video_files:
         if video_file in completed_work: continue
 
         video_name_clean = os.path.splitext(video_file)[0]
-        row = df_info[df_info[COL_FILENAME] == video_name_clean]
+        row = df_info[df_info[col_filename] == video_name_clean]
         if row.empty:
-            row = df_info[df_info[COL_FILENAME].str.contains(video_name_clean, regex=False)]
+            row = df_info[df_info[col_filename].str.contains(video_name_clean, regex=False)]
         
         if row.empty:
             print(f"SKIP: {video_file} not in Excel.")
@@ -95,9 +102,13 @@ def main():
         try:
             subjects = []
             for col in POS_COLUMNS:
+                if col not in row.columns:
+                    print(f"ERROR: Column '{col}' missing in Excel.")
+                    break
                 val = str(row.iloc[0][col]).strip()
                 val = "".join(c for c in val if c.isalnum() or c in "_-")
                 subjects.append(val)
+            if len(subjects) != NUM_BOXES: continue
         except: continue
 
         print(f"\n>>> PROCESSING: {video_file}")
@@ -131,7 +142,7 @@ def main():
             display = cv2.resize(current_frame, (0,0), fx=SCALE_FACTOR, fy=SCALE_FACTOR)
             
             if drift_vector != (0,0):
-                cv2.putText(display, f"DRIFT ACTIVE: X={drift_vector[0]} Y={drift_vector[1]}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(display, f"DRIFT: X={drift_vector[0]} Y={drift_vector[1]}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             for i, (k, v) in enumerate(cuts.items()):
                 x1, y1, x2, y2 = v
@@ -152,7 +163,7 @@ def main():
                      cv2.rectangle(display, orig_p1, orig_p2, (100,100,100), 1)
 
             if drift_mode:
-                cv2.putText(display, "DRIFT MODE: Click START point, then END point", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                cv2.putText(display, "DRIFT MODE: Click START then END point", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
             elif not viewing_end and current_idx < NUM_BOXES:
                 msg = f"Draw {BOX_NAMES[current_idx]}: {subjects[current_idx]}"
                 cv2.putText(display, msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
@@ -189,7 +200,6 @@ def main():
                 current_coords = []
 
             elif key == ord('d'):
-                print("Drift tool activated...")
                 viewing_end = False 
                 current_frame = frame_start.copy()
                 drift_mode = True
@@ -206,7 +216,7 @@ def main():
                 dx = p_end[0] - p_start[0]
                 dy = p_end[1] - p_start[1]
                 drift_vector = (dx, dy)
-                print(f"Drift Calculated: X={dx}, Y={dy}")
+                print(f"Drift: X={dx}, Y={dy}")
                 drift_mode = False
                 current_coords = []
 
@@ -284,7 +294,6 @@ def process_video(filename, filepath, cuts_dict, subjects_list, total_drift):
             curr_y2 = max(curr_y1 + 1, min(curr_y2, img_h))
             
             crop = frame[curr_y1:curr_y2, curr_x1:curr_x2]
-            
             if crop.shape[0] != item['h'] or crop.shape[1] != item['w']:
                  crop = cv2.resize(crop, (item['w'], item['h']))
 

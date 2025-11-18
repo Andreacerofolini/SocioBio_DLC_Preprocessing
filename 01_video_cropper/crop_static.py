@@ -7,23 +7,29 @@ from string import ascii_uppercase
 import sys
 
 # --- CONFIGURATION ---
+# Edit these paths
 VIDEO_PATH = r"C:\Path\To\RawVideos"
 OUTPUT_PATH = r"C:\Path\To\CroppedVideos"
-EXCEL_PATH = r"C:\Path\To\Data\metadata.xlsx" # or .csv
+EXCEL_PATH = r"C:\Path\To\Data\metadata.xlsx"
 PROGRESS_FILE = "progress_static.json"
 
-# Video Settings
-NUM_BOXES = 15  # Exact number of subjects
-VIDEO_FPS = 60
-SCALE_FACTOR = 0.5 # Zoom factor for the display window
+# --- EXPERIMENT SETTINGS (CHANGE THIS!) ---
+NUM_BOXES = 15           # <--- How many subjects do you have? (e.g., 6, 12, 15, 24)
+COL_PREFIX = "Pos"       # The prefix of your Excel columns (e.g., "Pos" -> Pos1, Pos2...)
+VIDEO_FPS = 60           # Frames per second of your video
+SCALE_FACTOR = 0.5       # Zoom factor for the display window
+# ------------------------------------------
 
-# EXCEL COLUMN NAMES
-COL_FILENAME = "file name" 
-# List of columns containing subject names (Position 1 to 15)
-POS_COLUMNS = [f"Pos{i}" for i in range(1, 16)] 
-# --- END CONFIGURATION ---
+# Dynamic Column Generation based on NUM_BOXES
+POS_COLUMNS = [f"{COL_PREFIX}{i}" for i in range(1, NUM_BOXES + 1)]
 
-BOX_NAMES = list(ascii_uppercase)[:NUM_BOXES]
+# Dynamic Label Generation (Letters A-Z if <=26, Numbers if >26)
+if NUM_BOXES <= 26:
+    BOX_NAMES = list(ascii_uppercase)[:NUM_BOXES]
+else:
+    BOX_NAMES = [str(i) for i in range(1, NUM_BOXES + 1)]
+
+# Random Colors
 np.random.seed(42)
 BOX_COLORS = [tuple(map(int, np.random.randint(50, 255, 3))) for _ in range(NUM_BOXES)]
 current_coords = []
@@ -37,28 +43,30 @@ def get_coordinate(event, x, y, flags, param):
 
 def load_progress():
     if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, 'r') as f:
-            return json.load(f)
+        with open(PROGRESS_FILE, 'r') as f: return json.load(f)
     return {}
 
 def save_progress(data):
-    with open(PROGRESS_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    with open(PROGRESS_FILE, 'w') as f: json.dump(data, f, indent=4)
 
 def load_metadata():
     if not os.path.exists(EXCEL_PATH):
         print(f"ERROR: Excel file not found at: {EXCEL_PATH}")
         sys.exit()
     try:
-        if EXCEL_PATH.endswith('.csv'):
-            df = pd.read_csv(EXCEL_PATH)
-        else:
-            df = pd.read_excel(EXCEL_PATH)
+        if EXCEL_PATH.endswith('.csv'): df = pd.read_csv(EXCEL_PATH)
+        else: df = pd.read_excel(EXCEL_PATH)
         
         df.columns = [str(c).strip() for c in df.columns]
-        if COL_FILENAME in df.columns:
-            df[COL_FILENAME] = df[COL_FILENAME].astype(str).str.strip()
-        return df
+        # Check for "file name" column
+        if "file name" in df.columns: col_file = "file name"
+        elif "filename" in df.columns: col_file = "filename"
+        else:
+            print(f"ERROR: Metadata must contain a 'file name' column.")
+            sys.exit()
+            
+        df[col_file] = df[col_file].astype(str).str.strip()
+        return df, col_file
     except Exception as e:
         print(f"Error reading metadata: {e}")
         sys.exit()
@@ -68,8 +76,8 @@ def main():
     if not os.path.exists(OUTPUT_PATH): os.makedirs(OUTPUT_PATH)
 
     print("--- START ---")
-    print(f"Reading Metadata: {EXCEL_PATH}")
-    df_info = load_metadata()
+    print(f"Setup: {NUM_BOXES} subjects per video.")
+    df_info, col_filename = load_metadata()
     
     all_files = os.listdir(VIDEO_PATH)
     video_files = [f for f in all_files if f.lower().endswith(('.mov', '.mp4', '.avi'))]
@@ -77,42 +85,37 @@ def main():
     completed_work = load_progress()
     last_cuts_memory = None 
 
-    print(f"Found {len(video_files)} videos. {len(completed_work)} already processed.")
-    print("\nKEYBOARD COMMANDS:")
-    print("  [Left Click]: Define box corners")
-    print("  [ n ]       : NEXT (Confirm box)")
-    print("  [ z ]       : UNDO (Last click/box)")
-    print("  [ c ]       : COPY boxes from previous video")
-    print("  [ s ]       : SAVE and process")
-    print("  [ ESC ]     : Exit")
-    print("-" * 40)
+    print(f"Found {len(video_files)} videos.")
+    print("\nCOMMANDS:\n  [Click]: Draw Box\n  [n]: Next Subject\n  [c]: Copy Previous\n  [z]: Undo\n  [s]: Save\n  [ESC]: Exit\n")
 
     for video_file in video_files:
         if video_file in completed_work: continue
 
         video_name_clean = os.path.splitext(video_file)[0]
-        row = df_info[df_info[COL_FILENAME] == video_name_clean]
+        row = df_info[df_info[col_filename] == video_name_clean]
         
         if row.empty:
-            # Try partial match
-            row = df_info[df_info[COL_FILENAME].str.contains(video_name_clean, regex=False)]
+            row = df_info[df_info[col_filename].str.contains(video_name_clean, regex=False)]
 
         if row.empty:
-            print(f"\n[SKIP] Video '{video_file}' not found in Excel.")
+            print(f"\n[SKIP] '{video_file}' not found in Excel.")
             continue
         
         try:
             subjects = []
             for col in POS_COLUMNS:
+                if col not in row.columns:
+                    print(f"ERROR: Column '{col}' missing in Excel! Check NUM_BOXES setting.")
+                    break
                 val = str(row.iloc[0][col]).strip()
                 val = "".join(c for c in val if c.isalnum() or c in "_-")
                 subjects.append(val)
+            if len(subjects) != NUM_BOXES: continue
         except Exception as e:
             print(f"Error parsing subjects: {e}")
             continue
 
         print(f"\n>>> PROCESSING: {video_file}")
-        
         cap = cv2.VideoCapture(os.path.join(VIDEO_PATH, video_file))
         if not cap.isOpened(): continue
         ret, frame = cap.read()
@@ -170,11 +173,11 @@ def main():
                 if last_cuts_memory:
                     cuts = last_cuts_memory.copy()
                     current_idx = NUM_BOXES
-                    print("Coordinates copied from previous video.")
+                    print("Copied.")
 
             elif key == ord('s'):
                 if len(cuts) == NUM_BOXES:
-                    print("Saving and processing...")
+                    print("Saving...")
                     cv2.destroyWindow('Cutter')
                     process_video(video_file, os.path.join(VIDEO_PATH, video_file), cuts, subjects)
                     completed_work[video_file] = cuts
