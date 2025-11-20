@@ -1,31 +1,31 @@
 # SocioBio DLC Preprocessing Suite
 
-A collection of Python tools designed to streamline the video preprocessing workflow for sociobiology experiments (e.g., multiple Petri dishes recorded simultaneously) before analysis with **DeepLabCut**.
+A comprehensive Python toolset designed to streamline the video preprocessing workflow for sociobiology experiments (e.g., multiple Petri dishes recorded simultaneously) prior to **DeepLabCut** analysis.
 
-This suite handles:
-1.  **Rotation**: Fixing camera orientation (if mounted upside-down).
-2.  **Cropping**: Splitting multi-subject videos into single-subject clips (with optional drift correction).
-3.  **Downsampling**: Reducing resolution and FPS for faster AI training.
-4.  **Enhancement**: Improving contrast for better tracking in low-visibility conditions.
-
----
-
-## 🚀 Workflow Overview
-
-Follow this order to prepare your videos:
-
-| Step | Tool Folder | Script | When to use it? |
-| :--- | :--- | :--- | :--- |
-| **0** | `00_video_rotator` | `rotate.py` | **Only if** the camera was mounted upside-down. |
-| **1** | `01_video_cropper` | `crop_static.py` OR `crop_drift.py` | **Always**. To cut the original video into individual subjects. |
-| **2** | `02_video_downsampler` | `downsample.py` | **Always**. To reduce file size (e.g., 1080p 60fps -> 540p 30fps). |
-| **3** | `03_video_enhancer` | `enhance.py` | **Optional**. Use if the subject is transparent or hard to see. |
+This suite automates:
+1.  **Rotation & Downsampling**: Fixing orientation and reducing resolution/FPS for efficient processing.
+2.  **Cropping**: Splitting multi-subject videos into individual clips (with **Drift Correction** support).
+3.  **Enhancement**: Applying CLAHE contrast improvement for low-visibility recordings.
 
 ---
 
-## 📋 Prerequisites
+## 📂 Project Structure
 
-### 1. Installation
-Install the required Python libraries using the provided requirements file:
-```bash
-pip install -r requirements.txt
+Based on the current configuration, your project is organized as follows:
+
+```text
+Root/
+├── 00_video_rotator/
+│   ├── rotate.py               # Handles Rotation, Resizing and Frame Skipping
+│   └── output_preprocessed/    # Intermediate output
+├── 01_video_cropper/
+│   ├── crop_static.py          # Standard fixed-position cropping
+│   ├── crop_drift.py           # Cropping with automatic drift compensation
+│   └── output_cropped/         # Individual subject videos
+├── 03_video_enhancer/
+│   ├── enhance.py              # Contrast enhancement (CLAHE)
+│   └── output_enhanced/        # Final result (optional)
+├── config_local.py             # CENTRAL CONFIGURATION FILE
+├── requirements.txt            # Python dependencies
+├── rename_list_coldhardiness.csv # Metadata for file naming
+└── README.md
