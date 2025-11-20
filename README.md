@@ -1,31 +1,41 @@
-# SocioBio DLC Preprocessing Suite
+# 🐜 SocioBio DLC Preprocessing Suite
 
-A comprehensive Python toolset designed to streamline the video preprocessing workflow for sociobiology experiments (e.g., multiple Petri dishes recorded simultaneously) prior to **DeepLabCut** analysis.
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-green?logo=opencv&logoColor=white)
+![Status](https://img.shields.io/badge/Maintainance-Active-success)
 
-This suite automates:
-1.  **Rotation & Downsampling**: Fixing orientation and reducing resolution/FPS for efficient processing.
-2.  **Cropping**: Splitting multi-subject videos into individual clips (with **Drift Correction** support).
-3.  **Enhancement**: Applying CLAHE contrast improvement for low-visibility recordings.
+A comprehensive Python toolset designed to streamline video preprocessing for sociobiology experiments (e.g., multiple Petri dishes) prior to **DeepLabCut** analysis.
 
 ---
 
-## 📂 Project Structure
+## ⚡ Key Features
 
-Based on the current configuration, your project is organized as follows:
+| Module | Description |
+| :--- | :--- |
+| 🔄 **Smart Rotator** | Handles **Rotation (180°)**, **Downsampling (50%)**, and **Frame Skipping** (60fps→30fps) in a single pass. |
+| ✂️ **Drift-Aware Cropper** | Cuts multi-subject grids into single videos. Includes **Automatic Drift Correction** for vibrating cameras. |
+| 👁️ **Contrast Booster** | Applies CLAHE enhancement to improve visibility of transparent subjects (e.g., larvae). |
 
-```text
-Root/
-├── 00_video_rotator/
-│   ├── rotate.py               # Handles Rotation, Resizing and Frame Skipping
-│   └── output_preprocessed/    # Intermediate output
-├── 01_video_cropper/
-│   ├── crop_static.py          # Standard fixed-position cropping
-│   ├── crop_drift.py           # Cropping with automatic drift compensation
-│   └── output_cropped/         # Individual subject videos
-├── 03_video_enhancer/
-│   ├── enhance.py              # Contrast enhancement (CLAHE)
-│   └── output_enhanced/        # Final result (optional)
-├── config_local.py             # CENTRAL CONFIGURATION FILE
-├── requirements.txt            # Python dependencies
-├── rename_list_coldhardiness.csv # Metadata for file naming
-└── README.md
+---
+
+## 🗺️ Workflow Overview
+
+How data flows through the suite:
+
+```mermaid
+graph TD
+    A[🎥 Raw Videos SD Card] -->|Input| B(00_rotate.py);
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    
+    B -->|Resize & Rotate| C[📂 Output Preprocessed];
+    
+    C --> D{Is Camera Static?};
+    
+    D -- Yes (Tripod) --> E[01_crop_static.py];
+    D -- No (Vibrations) --> F[01_crop_drift.py];
+    
+    E & F -->|Read CSV & Cut| G[📂 Output Cropped];
+    
+    G --> H(03_enhance.py);
+    H -->|CLAHE Filter| I[🏁 Final Output];
+    style I fill:#9f9,stroke:#333,stroke-width:2px
