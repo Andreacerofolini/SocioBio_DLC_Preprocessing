@@ -63,24 +63,22 @@ python 03_video_enhancer/enhance.py
 
 ## 🗺️ Workflow Overview
 
-```mermaid
 graph TD
-    A[🎥 Raw Videos (SD Card)] -->|Input| B(00_rotate.py);
+    A[Raw Videos (SD Card)] -->|Input| B(00_rotate.py);
     style A fill:#f9f,stroke:#333,stroke-width:2px
 
-    B -->|Resize & Rotate| C[📂 Output Preprocessed];
+    B -->|Resize & Rotate| C[Output Preprocessed];
 
     C --> D{Is Camera Static?};
 
     D -- Yes (Tripod) --> E[01_crop_static.py];
     D -- No (Vibration) --> F[01_crop_drift.py];
 
-    E & F -->|Read CSV & Cut| G[📂 Output Cropped];
+    E & F -->|Read CSV & Cut| G[Output Cropped];
 
     G --> H(03_enhance.py);
-    H -->|CLAHE Filter| I[🏁 Final Output];
+    H -->|CLAHE Filter| I[Final Output];
     style I fill:#9f9,stroke:#333,stroke-width:2px
-```
 
 ---
 
