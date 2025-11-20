@@ -62,6 +62,8 @@ python 03_video_enhancer/enhance.py
 ---
 
 ## 🗺️ Workflow Overview
+
+```mermaid
 graph TD
     A[🎥 Raw Videos SD Card] -->|Input| B(00_rotate.py);
     style A fill:#f9f,stroke:#333,stroke-width:2px
@@ -78,6 +80,7 @@ graph TD
     G --> H(03_enhance.py);
     H -->|CLAHE Filter| I[🏁 Final Output];
     style I fill:#9f9,stroke:#333,stroke-width:2px
+```
 
 ## 📂 Project Structure
 
