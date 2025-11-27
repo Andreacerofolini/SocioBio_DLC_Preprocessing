@@ -92,10 +92,15 @@ def main():
     df = load_csv_smart(EXCEL_PATH)
     if df is None: return 
 
+    # Coda dei lavori da processare dopo il setup
+    jobs_queue = []
+
     # --- LEGENDA TASTI SUL TERMINALE ---
     print("\n" + "=" * 60)
     print(f" DRIFT CORRECTION MODE | Subjects: {NUM_BOXES}")
     print("=" * 60)
+    print("  MODALITÀ BATCH: Configura tutto ora, processa dopo.")
+    print("-" * 60)
     print("  [Click] : Draw Box (2 clicks) OR Place Drift Point")
     print("  [ n ]   : Confirm Box")
     print("  [ z ]   : Undo (Last Box or Last Point)")
@@ -104,11 +109,12 @@ def main():
     print("  [ e ]   : GO TO END (Check drift)")
     print("  [ r ]   : RESET VIEW (Go to start)")
     print("-" * 60)
-    print("  [ s ]   : SAVE & START PROCESSING")
-    print("  [ Esc ] : Exit")
+    print("  [ s ]   : SAVE CONFIG & NEXT VIDEO (No processing yet)")
+    print("  [ Esc ] : Exit Setup & Start Processing Queued Jobs")
     print("=" * 60 + "\n")
     # -----------------------------------
 
+    # --- FASE 1: SETUP UTENTE (Tutti i video) ---
     for video_file in files:
         if video_file in processed_files: continue
 
@@ -116,7 +122,7 @@ def main():
         search_name = os.path.splitext(search_name)[0]
 
         if search_name not in df['Original_Name'].values:
-            print(f"SKIP: {video_file}")
+            print(f"SKIP: {video_file} (Non trovato nel CSV)")
             continue
 
         row = df[df['Original_Name'] == search_name].iloc[0]
@@ -132,8 +138,11 @@ def main():
         drift_calculated = False
         total_drift = (0, 0)
 
-        cv2.namedWindow(f"Setup: {video_file}")
-        cv2.setMouseCallback(f"Setup: {video_file}", mouse_callback, {'state': state})
+        win_name = f"Setup ({len(jobs_queue)+1}): {video_file}"
+        cv2.namedWindow(win_name)
+        cv2.setMouseCallback(win_name, mouse_callback, {'state': state})
+        
+        setup_completed = False
 
         while True:
             cap.set(cv2.CAP_PROP_POS_FRAMES, state['frame_idx'])
@@ -153,32 +162,23 @@ def main():
                 drift_calculated = False
                 total_drift = (0, 0)
 
-            # --- CALCOLO SPOSTAMENTO CORRENTE (LIVE) ---
-            current_shift_x = 0
-            current_shift_y = 0
+            # --- CALCOLO SPOSTAMENTO CORRENTE (LIVE PREVIEW) ---
+            current_shift_x, current_shift_y = 0, 0
             if drift_calculated and total_frames > 0:
-                # Quanto ci dobbiamo spostare in QUESTO frame?
                 progress = state['frame_idx'] / total_frames
                 current_shift_x = int(total_drift[0] * progress)
                 current_shift_y = int(total_drift[1] * progress)
-            # -------------------------------------------
 
-            # 1. Disegna i box (DINAMICI: Si spostano con il video)
+            # 1. Disegna i box (DINAMICI)
             for i, box in enumerate(state['boxes']):
                 bx1, by1, bx2, by2 = box
-                
-                # Applica lo spostamento attuale
                 curr_x1 = bx1 + current_shift_x
                 curr_y1 = by1 + current_shift_y
                 curr_x2 = bx2 + current_shift_x
                 curr_y2 = by2 + current_shift_y
-
-                # Scala per visualizzazione
                 dx1, dy1, dx2, dy2 = [int(c * SCALE_FACTOR) for c in [curr_x1, curr_y1, curr_x2, curr_y2]]
                 
                 label_text = subjects[i] if i < len(subjects) else f"Box {i}"
-                
-                # Disegna il box normale (colore originale)
                 cv2.rectangle(display_frame, (dx1, dy1), (dx2, dy2), COLORS[i % len(COLORS)], 2)
                 cv2.putText(display_frame, label_text, (dx1, dy1 - 5), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLORS[i % len(COLORS)], 2)
@@ -200,7 +200,7 @@ def main():
                 cv2.putText(display_frame, f"Next: {preview_label}", (bx1, by1 - 5), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
-            # 4. Visualizzazione punti Drift (solo i punti rossi, per capire che siamo in quella modalità)
+            # 4. Visualizzazione Drift
             if len(state['drift_points']) > 0:
                 p1 = state['drift_points'][0]
                 cv2.circle(display_frame, (int(p1[0]*SCALE_FACTOR), int(p1[1]*SCALE_FACTOR)), 5, (0, 0, 255), -1)
@@ -214,11 +214,9 @@ def main():
             info_txt = f"File: {video_file} | Box: {len(state['boxes'])}/{NUM_BOXES}"
             if drift_calculated: 
                 info_txt += f" | Drift: OK"
-                if state['frame_idx'] > 0: info_txt += " (Preview Attiva)"
             
             cv2.putText(display_frame, info_txt, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            
-            cv2.imshow(f"Setup: {video_file}", display_frame)
+            cv2.imshow(win_name, display_frame)
             
             key = cv2.waitKey(1) & 0xFF
 
@@ -234,22 +232,55 @@ def main():
 
             elif key == ord('e'): state['frame_idx'] = total_frames - 100 if total_frames > 100 else 0
             elif key == ord('r'): state['frame_idx'] = 0
-            elif key == ord('d'): 
-                state['mode'] = 'DRIFT_POINT'
-                print("Mode: DRIFT POINT. Click Start then End.")
+            elif key == ord('d'): state['mode'] = 'DRIFT_POINT'
             elif key == ord('s'): 
                 if len(state['boxes']) == NUM_BOXES:
-                    cv2.destroyWindow(f"Setup: {video_file}")
+                    # SALVA IL LAVORO IN CODA
+                    job_data = {
+                        'file': video_file,
+                        'boxes': state['boxes'],
+                        'drift': total_drift,
+                        'subjects': subjects,
+                        'drift_calculated': drift_calculated
+                    }
+                    jobs_queue.append(job_data)
+                    print(f" -> Configurazione salvata per: {video_file}")
+                    setup_completed = True
                     break
                 else: print(f"Define all {NUM_BOXES} boxes first!")
-            elif key == 27:
-                cv2.destroyAllWindows()
-                sys.exit("Exit")
+            elif key == 27: # ESC
+                print("Setup interrotto dall'utente. Avvio processamento dei video già configurati...")
+                break
+        
+        cap.release()
+        cv2.destroyWindow(win_name)
+        if not setup_completed and key == 27:
+            break
 
-        # SCRITTURA VIDEO
+    # --- FASE 2: BATCH PROCESSING ---
+    if not jobs_queue:
+        print("Nessun video configurato. Esco.")
+        return
+
+    print("\n" + "=" * 60)
+    print(f" AVVIO ELABORAZIONE BATCH: {len(jobs_queue)} video in coda")
+    print("=" * 60)
+
+    for job in jobs_queue:
+        video_file = job['file']
+        boxes = job['boxes']
+        total_drift = job['drift']
+        subjects = job['subjects']
+        drift_calculated = job['drift_calculated']
+
+        cap = cv2.VideoCapture(os.path.join(VIDEO_PATH, video_file))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Preparazione Writers
         writers = []
         clean_name_for_output = os.path.splitext(video_file)[0] 
-        for i, box in enumerate(state['boxes']):
+        
+        for i, box in enumerate(boxes):
             x1, y1, x2, y2 = box
             w_box, h_box = x2 - x1, y2 - y1
             sub_name = subjects[i]
@@ -258,12 +289,14 @@ def main():
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             writers.append({'writer': cv2.VideoWriter(out_full, fourcc, VIDEO_FPS, (w_box, h_box)), 'base_coords': (x1, y1), 'w': w_box, 'h': h_box})
 
+        # Loop di scrittura
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        with tqdm(total=total_frames, desc=f"Writing {video_file}", unit='frame', leave=True) as pbar:
+        with tqdm(total=total_frames, desc=f"Processing {video_file}", unit='frame', leave=True) as pbar:
             while True:
                 ret, frame = cap.read()
                 if not ret: break
                 frame_idx = cap.get(cv2.CAP_PROP_POS_FRAMES)
+                
                 shift_x, shift_y = 0, 0
                 if drift_calculated and total_frames > 0:
                     progress = frame_idx / total_frames
@@ -273,21 +306,32 @@ def main():
                 img_h, img_w = frame.shape[:2]
                 for item in writers:
                     base = item['base_coords']
+                    # Calcolo coordinate con drift
                     curr_x1 = max(0, min(base[0] + shift_x, img_w - 1))
                     curr_y1 = max(0, min(base[1] + shift_y, img_h - 1))
                     curr_x2 = max(curr_x1 + 1, min(curr_x1 + item['w'], img_w))
                     curr_y2 = max(curr_y1 + 1, min(curr_y1 + item['h'], img_h))
                     
                     crop = frame[curr_y1:curr_y2, curr_x1:curr_x2]
+                    
+                    # Sicurezza dimensioni
                     if crop.shape[0] != item['h'] or crop.shape[1] != item['w']:
                         crop = cv2.resize(crop, (item['w'], item['h']))
+                    
                     item['writer'].write(crop)
                 pbar.update(1)
+
         for item in writers: item['writer'].release()
         cap.release()
+        
+        # Aggiorna file di progresso dopo ogni video completato
         processed_files[video_file] = True
         save_progress(processed_files)
-        print(f"Done: {video_file}")
+        print(f"Completato: {video_file}")
+
+    print("\n" + "=" * 60)
+    print(" TUTTI I JOB COMPLETATI!")
+    print("=" * 60)
 
 if __name__ == "__main__":
     main()
